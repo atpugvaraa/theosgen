@@ -1,58 +1,88 @@
+use std::env;
 use std::env::set_current_dir;
-use std::io::{self, Write};
 use std::fs;
 use std::fs::write;
+use std::io::{self, Write};
 use std::process;
 
 fn main() {
-    println!("--- Theos Project Generator ---");
+    // take in arguments in cli
+    let args: Vec<String> = env::args().collect();
 
-    // Get Project Name & Create Directory
-    // In Rust, variables are immutable by default. use 'mut' if they change.
-    print!("Enter the project name: ");
-    let project_name = read_input();
+    // args[0] is name of the program ("theosgen")
+    // args[1] is the first arg
 
-    let project_path = std::path::Path::new(&project_name);
-    if project_path.exists() {
-        eprintln!("Error: That folder already exists!");
-        process::exit(1);
+    if args.len() > 1 {
+        let command = &args[1];
+
+        match command.as_str() {
+            "new" => run(),
+            "help" | "--help" | "-h" => help(),
+            _ => {
+                eprintln!("Unknown command: {}", command);
+                println!("Try `theosgen help` for info.");
+            }
+        }
+    } else {
+        run()
     }
 
-    // Create the "Namespace" version of the name (e.g. "My Project" -> "MyProject")
-    // This is vital for the Makefile and Control file to work correctly.
-    let name_ns = project_name.replace(" ", "");
+    fn help() {
+        println!("Usage: theosgen [COMMAND]");
+        println!("\nCommands:");
+        println!("  new     Start the interactive project generator");
+        println!("  help    Show this help message");
+    }
 
-    // Success/Error switch statement type shit
-    match fs::create_dir(&project_name) {
-        Ok(_) => println!("Created directory: {}", project_name),
-        Err(e) => {
-            eprintln!("Failed to create directory: {}", e);
+    fn run() {
+        println!("--- Theos Project Generator ---");
+
+        // Get Project Name & Create Directory
+        // In Rust, variables are immutable by default. use 'mut' if they change.
+        print!("Enter the project name: ");
+        let project_name = read_input();
+
+        let project_path = std::path::Path::new(&project_name);
+        if project_path.exists() {
+            eprintln!("Error: That folder already exists!");
             process::exit(1);
         }
-    }
 
-    // get metadata
-    print!("Enter package bundle id: ");
-    let bundle = read_input();
-    print!("Enter package description: ");
-    let description = read_input();
-    print!("Enter name of app tweaked: ");
-    let app = read_input();
-    print!("Enter bundle id of app tweaked: ");
-    let app_bundle = read_input();
-    print!("Enter name of the tweak author: ");
-    let author = read_input();
+        // Create the "Namespace" version of the name (e.g. "My Project" -> "MyProject")
+        // This is vital for the Makefile and Control file to work correctly.
+        let name_ns = project_name.replace(" ", "");
 
-    // change directory
-    set_current_dir(project_path).unwrap();
+        // Success/Error switch statement type shit
+        match fs::create_dir(&project_name) {
+            Ok(_) => println!("Created directory: {}", project_name),
+            Err(e) => {
+                eprintln!("Failed to create directory: {}", e);
+                process::exit(1);
+            }
+        }
 
-    // wait this somehow makes sense??
-    // kinda feels like
-    // init(bundle: String) {
-    //     bundle = self.bundle
-    // }
-    let control_file_content = format!(
-        "Package: {bundle}\n\
+        // get metadata
+        print!("Enter package bundle id: ");
+        let bundle = read_input();
+        print!("Enter package description: ");
+        let description = read_input();
+        print!("Enter name of app tweaked: ");
+        let app = read_input();
+        print!("Enter bundle id of app tweaked: ");
+        let app_bundle = read_input();
+        print!("Enter name of the tweak author: ");
+        let author = read_input();
+
+        // change directory
+        set_current_dir(project_path).unwrap();
+
+        // wait this somehow makes sense??
+        // kinda feels like
+        // init(bundle: String) {
+        //     bundle = self.bundle
+        // }
+        let control_file_content = format!(
+            "Package: {bundle}\n\
          Name: {name_ns}\n\
          Version: 0.0.1\n\
          Architecture: iphoneos-arm\n\
@@ -61,48 +91,49 @@ fn main() {
          Maintainer: {author}\n\
          Section: Tweaks\n\
          Depends: firmware (>= 11.0)\n",
-        bundle = bundle,
-        name_ns = name_ns,
-        description = description,
-        author = author
-    );
+            bundle = bundle,
+            name_ns = name_ns,
+            description = description,
+            author = author
+        );
 
-    let tweak_content = format!(
-        "#import <Foundation/Foundation.h>\n\
+        let tweak_content = format!(
+            "#import <Foundation/Foundation.h>\n\
          %config(generator=internal);\n\
          // Happy coding, {author}!\n",
-        author = author
-    );
+            author = author
+        );
 
-    let makefile_content = format!(
-        "TARGET := iphone:clang:latest:11.0\n\
-         INSTALL_TARGET_PROCESSES = {app}\n\
-         ARCHS = arm64\n\n\
-         include $(THEOS)/makefiles/common.mk\n\n\
-         TWEAK_NAME = {name_ns}\n\n\
-         $(TWEAK_NAME)_FILES = Tweak.xm\n\
-         $(TWEAK_NAME)_CFLAGS = -fobjc-arc\n\
-         $(TWEAK_NAME)_LOGOS_DEFAULT_GENERATOR = internal\n\n\
-         include $(THEOS_MAKE_PATH)/tweak.mk\n",
-        app = app,
-        name_ns = name_ns
-    );
+        let makefile_content = format!(
+            "TARGET := iphone:clang:latest:11.0\n\
+            INSTALL_TARGET_PROCESSES = {app}\n\
+            ARCHS = arm64\n\n\
+            include $(THEOS)/makefiles/common.mk\n\n\
+            TWEAK_NAME = {name_ns}\n\n\
+            $(TWEAK_NAME)_FILES = Tweak.xm\n\
+            $(TWEAK_NAME)_CFLAGS = -fobjc-arc\n\
+            $(TWEAK_NAME)_LOGOS_DEFAULT_GENERATOR = internal\n\n\
+            include $(THEOS_MAKE_PATH)/tweak.mk\n",
+            app = app,
+            name_ns = name_ns
+        );
 
-    let plist_content = format!(
-        "{{ Filter = {{ Bundles = ( \"{app_bundle}\" ); }}; }}",
-        app_bundle = app_bundle
-    );
+        let plist_content = format!(
+            "{{ Filter = {{ Bundles = ( \"{app_bundle}\" ); }}; }}",
+            app_bundle = app_bundle
+        );
+        
+        // Writing files
+        write("control", control_file_content).unwrap();
+        write("Tweak.xm", tweak_content).unwrap();
+        write("Makefile", makefile_content).unwrap();
 
-    // Writing files
-    write("control", control_file_content).unwrap();
-    write("Tweak.xm", tweak_content).unwrap();
-    write("Makefile", makefile_content).unwrap();
+        write(format!("{}.plist", name_ns), plist_content).unwrap();
 
-    write(format!("{}.plist", name_ns), plist_content).unwrap();
-
-    // similar to \(projectName) in Swift
-    // {} is used to interpolate strings and use variables in rust.
-    println!("Successfully created project: {}", project_name);
+        // similar to \(projectName) in Swift
+        // {} is used to interpolate strings and use variables in rust.
+        println!("Successfully created project: {}", project_name);
+    }
 }
 
 fn read_input() -> String {
